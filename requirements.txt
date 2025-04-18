@@ -1,0 +1,6 @@
+discord.py
+mariadb
+bcrypt
+python-dotenv
+uuid
+secrets
