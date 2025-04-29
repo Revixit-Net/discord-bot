@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import logging
+import uuid
 from utils.database import DatabaseManager
 from utils.helpers import (
     generate_uuid,
@@ -14,6 +15,16 @@ from utils.helpers import (
 from config import Config
 
 logger = logging.getLogger("discord_bot")
+
+access_token = str(uuid.uuid4())
+user_data = (
+    login,
+    hash_password(password),
+    generate_minecraft_uuid(login),
+    interaction.user.id,
+    "default",
+    access_token  # Добавлен accessToken
+)
 
 class Registration(commands.Cog):
     def __init__(self, bot):
