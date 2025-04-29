@@ -39,6 +39,7 @@ async def load_cogs():
     """Загрузка модулей"""
     await bot.add_cog(Registration(bot))
     await bot.add_cog(AdminTools(bot))
+    await bot.add_cog(SkinManager(bot))
     logger.info("Все модули загружены")
 
 if __name__ == "__main__":
