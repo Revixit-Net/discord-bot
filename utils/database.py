@@ -1,111 +1,104 @@
 import mariadb
-from config import Config
 import logging
+from contextlib import contextmanager
+from config import Config
 
 logger = logging.getLogger("discord_bot")
 
 class DatabaseManager:
     def __init__(self):
-        self.config = Config.DB_CONFIG
-        self.conn = None
+        self.config = Config.DB_CONFIG  # Конфигурация из config.py
 
-    def __enter__(self):
-        self.connect()
-        return self.conn.cursor()
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.conn:
-            self.conn.commit()
-            self.conn.close()
-
-    def connect(self):
+    @contextmanager
+    def get_cursor(self):
+        """Контекстный менеджер для работы с курсором БД."""
+        conn = None
         try:
-            self.conn = mariadb.connect(**self.config)
-            self.conn.autocommit = False
+            conn = mariadb.connect(**self.config)
+            cursor = conn.cursor()
+            yield cursor
+            conn.commit()
         except mariadb.Error as e:
-            logger.error(f"Ошибка подключения к БД: {str(e)}")
+            logger.error(f"Ошибка БД: {str(e)}")
+            if conn:
+                conn.rollback()
             raise
+        finally:
+            if conn:
+                conn.close()
 
-    def add_user(self, user_data: tuple):
+    def add_user(self, user_data: tuple) -> None:
+        """Добавление пользователя в БД."""
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO users 
+                (username, password, uuid, discord_id, serverID) 
+                VALUES (?, ?, ?, ?, ?)""",
+                user_data
+            )
+
+    def delete_user(self, username: str) -> int:
+        """Удаление пользователя из БД."""
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM users WHERE username = ?", 
+                (username,)
+            )
+            return cursor.rowcount
+
+    def check_existing_user(self, discord_id: int, username: str) -> bool:
+        """Проверка существования пользователя."""
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                "SELECT username FROM users WHERE discord_id = ? OR username = ?",
+                (discord_id, username)
+            )
+            return cursor.fetchone() is not None
+
+    def update_password(self, username: str, new_password: str) -> bool:
+        """Обновление пароля пользователя."""
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                "UPDATE users SET password = ? WHERE username = ?",
+                (new_password, username)
+            )
+            return cursor.rowcount > 0
+
+    def search_logins(self, query: str) -> list[str]:
+        """Поиск логинов по частичному совпадению."""
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                "SELECT username FROM users WHERE username LIKE ? LIMIT 10",
+                (f"%{query}%",)
+            )
+            return [row[0] for row in cursor.fetchall()]
+
+    def get_user_password(self, username: str) -> str | None:
+        """Получение хеша пароля пользователя."""
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                "SELECT password FROM users WHERE username = ?",
+                (username,)
+            )
+            result = cursor.fetchone()
+            return result[0] if result else None
+
+    def get_user_info(self, username: str) -> tuple | None:
+        """Получение информации о пользователе."""
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                """SELECT uuid, discord_id, serverID 
+                FROM users 
+                WHERE username = ?""",
+                (username,)
+            )
+            return cursor.fetchone()
+
+    def is_connected(self) -> bool:
+        """Проверка подключения к БД."""
         try:
-            with self as cursor:
-                cursor.execute(
-                    """INSERT INTO users 
-                    (username, password, accessToken, uuid, discord_id, serverID) 
-                    VALUES (?, ?, ?, ?, ?, ?)""",
-                    user_data
-                )
-                logger.debug(f"Добавлен пользователь: {user_data[0]}")
+            with self.get_cursor() as cursor:
+                cursor.execute("SELECT 1")
                 return True
-        except mariadb.IntegrityError as e:
-            logger.warning(f"Конфликт данных: {str(e)}")
-            raise
-
-    def delete_user(self, username: str):
-        try:
-            with self as cursor:
-                # Удаление из связанных таблиц
-                cursor.execute(
-                    """DELETE users, hwid, auth 
-                    FROM users 
-                    LEFT JOIN hwid ON users.uuid = hwid.uuid 
-                    LEFT JOIN auth ON users.uuid = auth.uuid 
-                    WHERE users.username = ?""",
-                    (username,)
-                )
-                logger.warning(f"Удален пользователь: {username}")
-                return cursor.rowcount
-        except mariadb.Error as e:
-            logger.error(f"Ошибка удаления: {str(e)}")
-            raise
-
-    def check_existing_user(self, discord_id: int, username: str):
-        try:
-            with self as cursor:
-                cursor.execute(
-                    """SELECT uuid FROM users 
-                    WHERE discord_id = ? OR username = ?""",
-                    (discord_id, username)
-                )
-                return cursor.fetchone()
-        except mariadb.Error as e:
-            logger.error(f"Ошибка проверки пользователя: {str(e)}")
-            raise
-
-    def get_user_info(self, username: str):
-        try:
-            with self as cursor:
-                cursor.execute(
-                    """SELECT uuid, discord_id, serverID 
-                    FROM users 
-                    WHERE username = ?""",
-                    (username,)
-                )
-                return cursor.fetchone()
-        except mariadb.Error as e:
-            logger.error(f"Ошибка получения данных: {str(e)}")
-            raise
-
-    def update_password(self, username: str, new_password: str):
-        try:
-            with self as cursor:
-                cursor.execute(
-                    """UPDATE users 
-                    SET password = ? 
-                    WHERE username = ?""",
-                    (new_password, username)
-                )
-                logger.info(f"Обновлен пароль для: {username}")
-                return cursor.rowcount
-        except mariadb.Error as e:
-            logger.error(f"Ошибка обновления пароля: {str(e)}")
-            raise
-
-    def get_all_users(self):
-        try:
-            with self as cursor:
-                cursor.execute("SELECT username, discord_id FROM users")
-                return cursor.fetchall()
-        except mariadb.Error as e:
-            logger.error(f"Ошибка получения списка: {str(e)}")
-            raise
+        except Exception:
+            return False

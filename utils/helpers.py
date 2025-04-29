@@ -1,8 +1,34 @@
 import uuid
 import bcrypt
 import re
+import discord
 import secrets
 from typing import Optional
+from PIL import Image
+import io
+
+async def validate_image(file: discord.Attachment) -> str:
+    """Проверка PNG файла"""
+    if file.size > 256 * 1024:
+        return "❌ Файл слишком большой (макс. 256KB)"
+    
+    if not file.filename.lower().endswith('.png'):
+        return "❌ Только PNG файлы разрешены"
+    
+    try:
+        content = await file.read()
+        img = Image.open(io.BytesIO(content))
+        if img.format != 'PNG':
+            return "❌ Это не PNG файл"
+            
+        # Проверка размеров для скина
+        if img.size != (64, 64):
+            return "❌ Неверный размер (требуется 64x64)"
+
+    except Exception:
+        return "❌ Некорректный файл изображения"
+    
+    return None
 
 def generate_uuid(username: str) -> str:
     return str(uuid.uuid3(uuid.NAMESPACE_OID, f"OfflinePlayer:{username}"))

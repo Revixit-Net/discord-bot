@@ -1,122 +1,140 @@
 import discord
-import mariadb
-import logging
-import uuid
-import bcrypt
 from discord.ext import commands
+from discord import app_commands
+import logging
 from utils.database import DatabaseManager
-from utils.helpers import generate_uuid
-from utils.helpers import generate_error_code
+from utils.helpers import (
+    generate_uuid,
+    hash_password,
+    validate_username,
+    validate_password,
+    generate_error_code,
+    verify_password
+)
+from config import Config
 
 logger = logging.getLogger("discord_bot")
 
 class Registration(commands.Cog):
-    async def send_error_response(self, ctx, error_message, exception=None):
-        error_code = generate_error_code()
-        error_msg = f"🚨 **Ошибка {error_code}**: {error_message}"
-        
-        # Логирование с кодом
-        logger.error(
-            f"Код ошибки: {error_code} | "
-            f"Пользователь: {ctx.author.id} | "
-            f"Ошибка: {str(exception)}",
-            exc_info=bool(exception)
-        )
-
-        await ctx.send(error_msg)
     def __init__(self, bot):
         self.bot = bot
         self.db = DatabaseManager()
-        self.cooldown = commands.CooldownMapping.from_cooldown(1, 30, commands.BucketType.user)
 
-    def hash_password(self, password: str) -> str:
-        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-    @commands.command(name="register")
-    async def start_registration(self, ctx):
-        try:
-            await ctx.author.send(
-                "🎮 **Регистрация игрового аккаунта**\n"
-                "Для регистрации введите в ЛС команду:\n"
-                "`!reg <логин> <пароль>`\n\n"
-                "**Требования:**\n"
-                "• Логин: 3-16 символов (a-z, 0-9, _)\n"
-                "• Пароль: минимум 8 символов\n"
-                "Пример: `!reg Alexei_123 sTr0ngP@ss`"
+    async def get_user_data(self, discord_id: int) -> tuple | None:
+        """Получение данных пользователя по Discord ID"""
+        with self.db.get_cursor() as cursor:
+            cursor.execute(
+                "SELECT username, password FROM users WHERE discord_id = ?",
+                (discord_id,)
             )
-            logger.info(f"Отправлены инструкции для {ctx.author.id}")
+            return cursor.fetchone()
 
-        except discord.Forbidden:
-            await ctx.send("🔔 Включите личные сообщения для регистрации!")
-            logger.warning(f"Не удалось отправить ЛС пользователю {ctx.author.id}")
-
-    @commands.command(name="reg")
-    @commands.dm_only()
-    async def process_registration(self, ctx, login: str, password: str):
-        logger.info(f"Начата регистрация: {ctx.author.id} | Логин: {login}")
+    @app_commands.command(
+        name="reg",
+        description="Регистрация игрового аккаунта"
+    )
+    @app_commands.describe(
+        login="Логин (3-16 символов, a-Z, 0-9, _)",
+        password="Пароль (минимум 8 символов)"
+    )
+    async def register(
+        self,
+        interaction: discord.Interaction,
+        login: str,
+        password: str
+    ):
+        """Обработчик команды /reg"""
+        await interaction.response.defer(ephemeral=True)
 
         try:
             # Валидация логина
-            if not 3 <= len(login) <= 16:
-                raise commands.BadArgument("Логин должен быть от 3 до 16 символов")
-
-            if not login.isalnum() and '_' not in login:
-                raise commands.BadArgument("Логин содержит запрещённые символы")
+            if error := validate_username(login):
+                return await interaction.followup.send(f"❌ {error}", ephemeral=True)
 
             # Валидация пароля
-            if len(password) < 8:
-                raise commands.BadArgument("Пароль слишком короткий (минимум 8 символов)")
+            if error := validate_password(password):
+                return await interaction.followup.send(f"❌ {error}", ephemeral=True)
 
-            # Проверка существующего аккаунта
-            existing = self.db.check_existing_user(ctx.author.id, login)
+            # Проверка существующего пользователя
+            existing = self.db.check_existing_user(interaction.user.id, login)
             if existing:
-                logger.warning(f"Попытка повторной регистрации: {ctx.author.id}")
-                return await ctx.send("❌ У вас уже есть аккаунт или логин занят!")
+                return await interaction.followup.send(
+                    "❌ Логин уже занят или аккаунт привязан к вам!",
+                    ephemeral=True
+                )
 
             # Генерация данных
             user_data = (
                 login,
-                self.hash_password(password),
-                str(uuid.uuid4()),  # accessToken
-                generate_uuid(login),  # UUID
-                ctx.author.id,
-                "default"  # serverID
+                hash_password(password),
+                generate_minecraft_uuid(login),
+                interaction.user.id,
+                "default"
             )
 
             # Сохранение в БД
             self.db.add_user(user_data)
             
-            logger.info(f"Успешная регистрация: {login} ({ctx.author.id})")
-            await ctx.send(f"✅ Аккаунт **{login}** успешно создан!\n"
-                          f"Используйте логин и пароль в лаунчере.")
+            await interaction.followup.send(
+                "✅ Регистрация успешна! Используйте логин и пароль в лаунчере.",
+                ephemeral=True
+            )
+            logger.info(f"Зарегистрирован новый аккаунт: {login}")
 
-        except mariadb.IntegrityError as e:
-            await self.send_error_response(
-                ctx, 
-                "Конфликт данных. Логин уже занят.",
-                e
-            )
-        
-        except commands.BadArgument as e:
-            await self.send_error_response(
-                ctx,
-                f"Некорректные данные: {str(e)}",
-                e
-            )
-        
         except Exception as e:
-            await self.send_error_response(
-                ctx,
-                "Внутренняя ошибка сервера. Просьба отправить репорт об ошибке в канал https://ptb.discord.com/channels/1224402434160595027/1230213959525601420 .",
-                e
+            error_code = generate_error_code()
+            logger.error(f"Ошибка регистрации ({error_code}): {str(e)}", exc_info=True)
+            await interaction.followup.send(
+                f"⚠ Ошибка {error_code}: Не удалось завершить регистрацию",
+                ephemeral=True
             )
 
-    @process_registration.error
-    async def reg_error(self, ctx, error):
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("❌ Неправильный формат команды! Пример: `!reg Alexei password`")
-        elif isinstance(error, commands.PrivateMessageOnly):
-            await ctx.send("🚫 Используйте команду в личных сообщениях бота!")
+    @app_commands.command(
+        name="changepassword",
+        description="Сменить пароль"
+    )
+    @app_commands.describe(
+        old_password="Текущий пароль",
+        new_password="Новый пароль (мин. 8 символов)"
+    )
+    async def change_password(
+        self,
+        interaction: discord.Interaction,
+        old_password: str,
+        new_password: str
+    ):
+        """Смена пароля пользователем"""
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Получение данных пользователя
+            user_data = await self.get_user_data(interaction.user.id)
+            if not user_data:
+                return await interaction.followup.send("❌ Аккаунт не найден!", ephemeral=True)
+
+            # Проверка старого пароля
+            current_hash = user_data[1]
+            if not verify_password(old_password, current_hash):
+                return await interaction.followup.send("❌ Неверный текущий пароль!", ephemeral=True)
+
+            # Валидация нового пароля
+            if error := validate_password(new_password):
+                return await interaction.followup.send(f"❌ {error}", ephemeral=True)
+
+            # Обновление пароля
+            new_hash = hash_password(new_password)
+            self.db.update_password(user_data[0], new_hash)
+            
+            await interaction.followup.send("✅ Пароль успешно изменён!", ephemeral=True)
+            logger.info(f"Пользователь {user_data[0]} сменил пароль")
+
+        except Exception as e:
+            error_code = generate_error_code()
+            logger.error(f"Ошибка смены пароля ({error_code}): {str(e)}", exc_info=True)
+            await interaction.followup.send(
+                f"⚠ Ошибка {error_code}: Не удалось изменить пароль",
+                ephemeral=True
+            )
 
 async def setup(bot):
     await bot.add_cog(Registration(bot))

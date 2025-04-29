@@ -1,7 +1,9 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import logging
 from utils.database import DatabaseManager
+from utils.helpers import validate_password, hash_password, generate_error_code
 from config import Config
 
 logger = logging.getLogger("discord_bot")
@@ -12,36 +14,61 @@ class AdminTools(commands.Cog):
         self.db = DatabaseManager()
         self.admin_role_id = Config.ADMIN_ROLE_ID
 
-    async def cog_check(self, ctx):
-        if not any(role.id == self.admin_role_id for role in ctx.author.roles):
-            logger.warning(f"Попытка доступа к админ-командам: {ctx.author} (ID: {ctx.author.id})")
-            raise commands.MissingPermissions(["administrator"])
-        return True
+    async def login_autocomplete(
+        self, 
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Автодополнение логинов из базы данных."""
+        if not self.db.is_connected():
+            return [app_commands.Choice(name="⚠ Нет подключения к БД", value="error")]
+        
+        logins = self.db.search_logins(current)
+        return [app_commands.Choice(name=login, value=login) for login in logins[:25]]
 
-    @commands.command(name="delete_user", help="Удалить аккаунт пользователя по логину")
-    async def delete_user(self, ctx, username: str):
-        logger.info(f"Запрос на удаление от {ctx.author}: пользователь {username}")
-
+    @app_commands.command(
+        name="delete",
+        description="[ADMIN] Удалить аккаунт пользователя"
+    )
+    @app_commands.describe(username="Логин пользователя")
+    @app_commands.autocomplete(username=login_autocomplete)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def delete_user(
+        self,
+        interaction: discord.Interaction,
+        username: str
+    ):
+        """Удаление пользователя из базы данных."""
+        await interaction.response.defer(ephemeral=True)
         try:
-            deleted_count = self.db.delete_user(username)
-            
-            if deleted_count > 0:
-                logger.warning(f"Успешное удаление: {username} | Инициатор: {ctx.author.id}")
-                await ctx.send(f"✅ Аккаунт `{username}` успешно удалён!")
+            deleted = self.db.delete_user(username)
+            if deleted:
+                msg = f"✅ Аккаунт **{username}** удалён!"
+                logger.warning(f"Удалён пользователь: {username}")
             else:
-                logger.info(f"Попытка удаления несуществующего аккаунта: {username}")
-                await ctx.send("❌ Пользователь не найден в базе данных!")
-
+                msg = "❌ Пользователь не найден"
+            await interaction.followup.send(msg, ephemeral=True)
         except Exception as e:
-            logger.error(f"Ошибка при удалении {username}: {str(e)}", exc_info=True)
-            await ctx.send("⚠ Произошла ошибка при выполнении операции!")
+            error_code = generate_error_code()
+            logger.error(f"{error_code} | {str(e)}", exc_info=True)
+            await interaction.followup.send(f"⚠ Ошибка {error_code}", ephemeral=True)
 
-    @commands.command(name="user_info", help="Получить информацию о пользователе")
-    async def get_user_info(self, ctx, username: str):
-        logger.info(f"Запрос информации о пользователе: {username}")
-
+    @app_commands.command(
+        name="userinfo",
+        description="[ADMIN] Информация о пользователе"
+    )
+    @app_commands.describe(username="Логин пользователя")
+    @app_commands.autocomplete(username=login_autocomplete)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def user_info(
+        self,
+        interaction: discord.Interaction,
+        username: str
+    ):
+        """Получение информации о пользователе."""
+        await interaction.response.defer(ephemeral=True)
         try:
-            with self.db as cursor:
+            with self.db.get_cursor() as cursor:
                 cursor.execute(
                     """SELECT uuid, discord_id, serverID 
                     FROM users 
@@ -49,33 +76,55 @@ class AdminTools(commands.Cog):
                     (username,)
                 )
                 result = cursor.fetchone()
-
                 if result:
                     uuid, discord_id, server_id = result
                     embed = discord.Embed(title=f"Информация о {username}", color=0x00ff00)
                     embed.add_field(name="UUID", value=f"`{uuid}`", inline=False)
                     embed.add_field(name="Discord ID", value=f"`{discord_id}`", inline=False)
                     embed.add_field(name="Сервер", value=server_id, inline=False)
-                    
-                    logger.debug(f"Успешный запрос информации: {username}")
-                    await ctx.send(embed=embed)
+                    await interaction.followup.send(embed=embed, ephemeral=True)
                 else:
-                    await ctx.send("🔍 Пользователь не найден")
-
+                    await interaction.followup.send("🔍 Пользователь не найден", ephemeral=True)
         except Exception as e:
-            logger.error(f"Ошибка получения информации: {str(e)}")
-            await ctx.send("⚠ Ошибка при получении данных")
+            error_code = generate_error_code()
+            logger.error(f"{error_code} | {str(e)}", exc_info=True)
+            await interaction.followup.send(f"⚠ Ошибка {error_code}", ephemeral=True)
 
-    @delete_user.error
-    @get_user_info.error
-    async def admin_error_handler(self, ctx, error):
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"❌ Не указан обязательный аргумент: `{error.param.name}`")
-        elif isinstance(error, commands.MissingPermissions):
-            await ctx.send("🚫 Недостаточно прав для выполнения команды!")
-        else:
-            await ctx.send("⚠ Произошла непредвиденная ошибка!")
+    @app_commands.command(
+        name="setpassword",
+        description="[ADMIN] Установить новый пароль"
+    )
+    @app_commands.describe(
+        username="Логин пользователя",
+        new_password="Новый пароль (мин. 8 символов)"
+    )
+    @app_commands.autocomplete(username=login_autocomplete)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def admin_set_password(
+        self,
+        interaction: discord.Interaction,
+        username: str,
+        new_password: str
+    ):
+        """Принудительная смена пароля администратором."""
+        await interaction.response.defer(ephemeral=True)
+        try:
+            if error := validate_password(new_password):
+                return await interaction.followup.send(f"❌ {error}", ephemeral=True)
+            
+            new_hash = hash_password(new_password)
+            success = self.db.update_password(username, new_hash)
+            if success:
+                msg = f"✅ Пароль для **{username}** изменён!"
+                logger.warning(f"Админ сменил пароль: {username}")
+            else:
+                msg = "❌ Пользователь не найден"
+            await interaction.followup.send(msg, ephemeral=True)
+        except Exception as e:
+            error_code = generate_error_code()
+            logger.error(f"{error_code} | {str(e)}", exc_info=True)
+            await interaction.followup.send(f"⚠ Ошибка {error_code}", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(AdminTools(bot))
-    logger.info("Админские команды успешно загружены")
+    logger.info("Админские команды загружены")
