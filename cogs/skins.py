@@ -30,11 +30,17 @@ class SkinManager(commands.Cog):
     @app_commands.describe(
         asset_type="Тип файла",
         file="PNG файл (макс. 256KB)"
+   )
+    @app_commands.choices(  # Добавь этот декоратор!
+        asset_type=[
+            app_commands.Choice(name="Скин", value="skins"),
+            app_commands.Choice(name="Плащ", value="cloaks")
+        ]
     )
     async def upload_asset(
         self,
         interaction: discord.Interaction,
-        asset_type: app_commands.Choice[str],
+        asset_type: str,  # Измени тип на str вместо Choice!
         file: discord.Attachment
     ):
         await interaction.response.defer(ephemeral=True)
