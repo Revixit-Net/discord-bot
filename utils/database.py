@@ -33,7 +33,7 @@ class DatabaseManager:
             cursor.execute(
                 """INSERT INTO users 
                 (username, password, uuid, discord_id, serverID) 
-                VALUES (?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?)""",
                 user_data
             )
 
