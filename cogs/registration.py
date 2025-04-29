@@ -17,14 +17,6 @@ from config import Config
 logger = logging.getLogger("discord_bot")
 
 access_token = str(uuid.uuid4())
-user_data = (
-    login,
-    hash_password(password),
-    generate_uuid(login),
-    interaction.user.id,
-    "default",
-    access_token  # Добавлен accessToken
-)
 
 class Registration(commands.Cog):
     def __init__(self, bot):
@@ -80,7 +72,8 @@ class Registration(commands.Cog):
                 hash_password(password),
                 generate_uuid(login),
                 interaction.user.id,
-                "default"
+                "default",
+                access_token
             )
 
             # Сохранение в БД
