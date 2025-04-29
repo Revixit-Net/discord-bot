@@ -31,7 +31,7 @@ class SkinManager(commands.Cog):
         asset_type="Тип файла",
         file="PNG файл (макс. 256KB)"
    )
-    @app_commands.choices(  # Добавь этот декоратор!
+    @app_commands.choices(
         asset_type=[
             app_commands.Choice(name="Скин", value="skins"),
             app_commands.Choice(name="Плащ", value="cloaks")
@@ -40,7 +40,7 @@ class SkinManager(commands.Cog):
     async def upload_asset(
         self,
         interaction: discord.Interaction,
-        asset_type: str,  # Измени тип на str вместо Choice!
+        asset_type: str,
         file: discord.Attachment
     ):
         await interaction.response.defer(ephemeral=True)
@@ -62,7 +62,7 @@ class SkinManager(commands.Cog):
             content = await file.read()
             file_hash = hashlib.sha256(content).hexdigest()
             filename = f"{user_data[0]}.png"
-            asset_type = asset_type.value.lower()
+            asset_type = asset_type.lower()
 
             # Пути для сохранения
             web_path = f"{self.base_path[asset_type]}/{filename}"
@@ -72,7 +72,7 @@ class SkinManager(commands.Cog):
             with open(temp_path, "wb") as f:
                 f.write(content)
 
-            # Здесь должна быть проверка модератором
+            # Здесь должна быть проверка модератором?
             # ...
 
             # Переносим в целевую папку
