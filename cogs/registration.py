@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+import uuid
 import logging
 from utils.database import DatabaseManager
 from utils.helpers import (
