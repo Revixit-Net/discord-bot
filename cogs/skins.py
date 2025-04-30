@@ -81,13 +81,13 @@ class SkinManager(commands.Cog):
             # Обновляем БД
             with self.db.get_cursor() as cursor:
                 cursor.execute(
-                    """INSERT INTO uploads (user_uuid, skin_hash, cloak_hash)
+                    """INSERT INTO uploads (user_uuid, skin_hash, cloak_hash, last_updated)
                     VALUES (?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                         {} = ?,
                         last_updated = CURRENT_TIMESTAMP
                     """.format(f"{asset_type}_hash"),
-                    (user_data[1], file_hash, file_hash, file_hash)
+                    (user_data[1], file_hash, file_hash)
                 )
 
             await interaction.followup.send(
