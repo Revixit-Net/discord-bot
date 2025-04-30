@@ -87,7 +87,7 @@ class SkinManager(commands.Cog):
                         {} = ?,
                         last_updated = CURRENT_TIMESTAMP
                     """.format(f"{asset_type}_hash"),
-                    (user_data[1], file_hash, file_hash)
+                    (user_data[1], file_hash, file_hash, file_hash)
                 )
 
             await interaction.followup.send(
