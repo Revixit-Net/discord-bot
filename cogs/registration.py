@@ -67,9 +67,10 @@ class Registration(commands.Cog):
             user_data = (
                 login,
                 hash_password(password),
-                generate_minecraft_uuid(login),
+                generate_uuid(login),
                 interaction.user.id,
-                "default"
+                "default",
+                "Test"
             )
 
             # Сохранение в БД

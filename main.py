@@ -5,7 +5,6 @@ from discord.ext.commands import Bot
 from config import Config
 from cogs.registration import Registration
 from cogs.admin import AdminTools
-from cogs.skins import SkinManager
 
 
 # Настройка логгера
