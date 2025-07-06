@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+import uuid
 import logging
 from utils.database import DatabaseManager
 from utils.helpers import (
@@ -14,6 +15,8 @@ from utils.helpers import (
 from config import Config
 
 logger = logging.getLogger("discord_bot")
+
+access_token = str(uuid.uuid4())
 
 class Registration(commands.Cog):
     def __init__(self, bot):
@@ -70,7 +73,7 @@ class Registration(commands.Cog):
                 generate_uuid(login),
                 interaction.user.id,
                 "default",
-                "Test"
+                access_token
             )
 
             # Сохранение в БД
