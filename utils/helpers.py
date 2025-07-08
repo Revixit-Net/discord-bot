@@ -30,9 +30,6 @@ async def validate_image(file: discord.Attachment) -> str:
     
     return None
 
-def generate_uuid(username: str) -> str:
-    return str(uuid.uuid3(uuid.NAMESPACE_OID, f"OfflinePlayer:{username}"))
-
 def generate_error_code(length: int = 6) -> str:
     return secrets.token_hex(length // 2 + 1)[:length].upper()
 

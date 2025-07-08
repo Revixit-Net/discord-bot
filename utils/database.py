@@ -32,8 +32,8 @@ class DatabaseManager:
         with self.get_cursor() as cursor:
             cursor.execute(
                 """INSERT INTO users 
-                (username, password, uuid, discord_id, serverID, accessToken) 
-                VALUES (?, ?, ?, ?, ?, ?)""",
+                (username, password, discord_id, serverID, accessToken) 
+                VALUES (?, ?, ?, ?, ?)""",
                 user_data
             )
 

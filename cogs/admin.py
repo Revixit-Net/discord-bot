@@ -21,7 +21,7 @@ class AdminTools(commands.Cog):
     ) -> list[app_commands.Choice[str]]:
         """Автодополнение логинов из базы данных."""
         if not self.db.is_connected():
-            return [app_commands.Choice(name="⚠ Нет подключения к БД", value="error")]
+            return [app_commands.Choice(name="🚨 Нет подключения к БД", value="error")]
         
         logins = self.db.search_logins(current)
         return [app_commands.Choice(name=login, value=login) for login in logins[:25]]
@@ -51,7 +51,7 @@ class AdminTools(commands.Cog):
         except Exception as e:
             error_code = generate_error_code()
             logger.error(f"{error_code} | {str(e)}", exc_info=True)
-            await interaction.followup.send(f"⚠ Ошибка {error_code}", ephemeral=True)
+            await interaction.followup.send(f"🚨 Ошибка {error_code}", ephemeral=True)
 
     @app_commands.command(
         name="userinfo",
@@ -88,7 +88,7 @@ class AdminTools(commands.Cog):
         except Exception as e:
             error_code = generate_error_code()
             logger.error(f"{error_code} | {str(e)}", exc_info=True)
-            await interaction.followup.send(f"⚠ Ошибка {error_code}", ephemeral=True)
+            await interaction.followup.send(f"🚨 Ошибка {error_code}", ephemeral=True)
 
     @app_commands.command(
         name="setpassword",
@@ -123,7 +123,7 @@ class AdminTools(commands.Cog):
         except Exception as e:
             error_code = generate_error_code()
             logger.error(f"{error_code} | {str(e)}", exc_info=True)
-            await interaction.followup.send(f"⚠ Ошибка {error_code}", ephemeral=True)
+            await interaction.followup.send(f"🚨 Ошибка {error_code}", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(AdminTools(bot))

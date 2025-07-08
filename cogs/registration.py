@@ -5,7 +5,6 @@ import uuid
 import logging
 from utils.database import DatabaseManager
 from utils.helpers import (
-    generate_uuid,
     hash_password,
     validate_username,
     validate_password,
@@ -70,7 +69,6 @@ class Registration(commands.Cog):
             user_data = (
                 login,
                 hash_password(password),
-                generate_uuid(login),
                 interaction.user.id,
                 "default",
                 access_token
@@ -89,7 +87,7 @@ class Registration(commands.Cog):
             error_code = generate_error_code()
             logger.error(f"Ошибка регистрации ({error_code}): {str(e)}", exc_info=True)
             await interaction.followup.send(
-                f"⚠ Ошибка {error_code}: Не удалось завершить регистрацию",
+                f"🚨 Ошибка {error_code}: Не удалось завершить регистрацию",
                 ephemeral=True
             )
 
@@ -136,7 +134,7 @@ class Registration(commands.Cog):
             error_code = generate_error_code()
             logger.error(f"Ошибка смены пароля ({error_code}): {str(e)}", exc_info=True)
             await interaction.followup.send(
-                f"⚠ Ошибка {error_code}: Не удалось изменить пароль",
+                f"🚨 Ошибка {error_code}: Не удалось изменить пароль",
                 ephemeral=True
             )
 

@@ -28,8 +28,7 @@ bot = Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     """Обработчик события запуска бота"""
-    logger.info(f"+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-    logger.info(f"Бот {bot.user} успешно запущен! ID: {bot.user.id}")
+    logger.info(f"Запуск бота {bot.user} | ID: {bot.user.id}")
     await load_cogs()
     await bot.tree.sync()
     logger.info("Слеш-команды синхронизированы")
@@ -38,7 +37,6 @@ async def load_cogs():
     """Загрузка модулей"""
     await bot.add_cog(Registration(bot))
     await bot.add_cog(AdminTools(bot))
-    await bot.add_cog(SkinManager(bot))
     logger.info("Все модули загружены")
 
 if __name__ == "__main__":
